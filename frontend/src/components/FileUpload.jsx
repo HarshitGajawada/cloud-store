@@ -10,6 +10,7 @@ export default function FileUpload({ onUploadSuccess }) {
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [duplicate, setDuplicate] = useState(null);
   const { token } = useAuth();
 
   const onDrop = useCallback(async (acceptedFiles) => {
@@ -18,6 +19,7 @@ export default function FileUpload({ onUploadSuccess }) {
     const file = acceptedFiles[0];
     setError('');
     setSuccess('');
+    setDuplicate(null);
     setUploading(true);
     setProgress(0);
 
@@ -42,19 +44,25 @@ export default function FileUpload({ onUploadSuccess }) {
         }
       );
 
-      setSuccess(`File uploaded successfully! Stored in ${response.data.storage_location.toUpperCase()}`);
-      setProgress(100);
-      
-      // Notify parent component
-      if (onUploadSuccess) {
-        onUploadSuccess(response.data);
-      }
-
-      // Clear success message after 3 seconds
-      setTimeout(() => {
-        setSuccess('');
+      // Check if it's a duplicate file response
+      if (response.data.is_duplicate) {
+        setDuplicate(response.data);
         setProgress(0);
-      }, 3000);
+      } else {
+        setSuccess(`File uploaded successfully! Stored in ${response.data.storage_location.toUpperCase()}`);
+        setProgress(100);
+        
+        // Notify parent component
+        if (onUploadSuccess) {
+          onUploadSuccess(response.data);
+        }
+
+        // Clear success message after 3 seconds
+        setTimeout(() => {
+          setSuccess('');
+          setProgress(0);
+        }, 3000);
+      }
 
     } catch (err) {
       const message = err.response?.data?.detail || 'Upload failed';
@@ -145,6 +153,26 @@ export default function FileUpload({ onUploadSuccess }) {
       {success && (
         <div className="mt-4 p-3 bg-green-100 border border-green-400 text-green-700 rounded">
           {success}
+        </div>
+      )}
+
+      {duplicate && (
+        <div className="mt-4 p-3 bg-yellow-100 border border-yellow-400 text-yellow-800 rounded">
+          <div className="flex items-center">
+            <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+            </svg>
+            <div>
+              <p className="font-medium">Duplicate file detected!</p>
+              <p className="text-sm">{duplicate.message}</p>
+            </div>
+          </div>
+          <button
+            onClick={() => setDuplicate(null)}
+            className="mt-2 text-sm underline"
+          >
+            Dismiss
+          </button>
         </div>
       )}
 

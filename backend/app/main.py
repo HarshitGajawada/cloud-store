@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.routers import auth_router, file_router
+from app.routers import auth_router, file_router, analytics_router
 from app.database import engine, Base
 
 # Configure logging
@@ -53,6 +53,7 @@ app.add_middleware(
 # Include routers
 app.include_router(auth_router.router)
 app.include_router(file_router.router)
+app.include_router(analytics_router.router)
 
 
 # Global exception handlers

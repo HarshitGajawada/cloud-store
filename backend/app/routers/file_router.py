@@ -1,15 +1,32 @@
 import logging
+import hashlib
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File as FastAPIFile
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import User, File
-from app.schemas import FileUploadResponse, FileListResponse, FileResponse
+from app.models import User, File, FileAccessLog
+from app.schemas import FileUploadResponse, FileListResponse, FileResponse, DuplicateFileResponse
 from app.auth import get_current_user, verify_token
 from app.storage import storage_service
 import os
 
 logger = logging.getLogger(__name__)
+
+
+def compute_file_hash(content: bytes) -> str:
+    """Compute SHA-256 hash of file content for duplicate detection"""
+    return hashlib.sha256(content).hexdigest()
+
+
+def log_file_access(db: Session, file_id: int, user_id: int, action: str):
+    """Log file access event for analytics"""
+    access_log = FileAccessLog(
+        file_id=file_id,
+        user_id=user_id,
+        action=action
+    )
+    db.add(access_log)
+    db.commit()
 
 router = APIRouter(prefix="/api/files", tags=["files"])
 
@@ -18,17 +35,19 @@ MAX_FILE_SIZE_MB = int(os.getenv("MAX_FILE_SIZE_MB", "100"))
 MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
 
 
-@router.post("/upload", response_model=FileUploadResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/upload", status_code=status.HTTP_201_CREATED)
 async def upload_file(
     file: UploadFile = FastAPIFile(...),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
-    Upload file to MinIO storage
+    Upload file to MinIO storage with duplicate detection
     
     - Accepts multipart/form-data file upload
     - Validates file size (max 100MB)
+    - Computes SHA-256 hash for duplicate detection
+    - If duplicate found, returns existing file info
     - Generates unique filename using UUID
     - Uploads to MinIO with user-scoped path
     - Creates File record in database
@@ -50,6 +69,23 @@ async def upload_file(
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="File is empty"
+            )
+        
+        # Compute content hash for duplicate detection
+        content_hash = compute_file_hash(file_content)
+        
+        # Check for duplicate file (same content hash for this user)
+        existing_file = db.query(File).filter(
+            File.user_id == current_user.id,
+            File.content_hash == content_hash
+        ).first()
+        
+        if existing_file:
+            logger.info(f"Duplicate file detected: {existing_file.id} for user {current_user.id}")
+            return DuplicateFileResponse(
+                is_duplicate=True,
+                message=f"File already exists as '{existing_file.original_filename}'",
+                existing_file=FileResponse.model_validate(existing_file)
             )
         
         # Get content type
@@ -77,13 +113,14 @@ async def upload_file(
         # Extract unique filename from object_key
         unique_filename = object_key.split('/')[-1]
         
-        # Create file record in database
+        # Create file record in database with content hash
         db_file = File(
             user_id=current_user.id,
             filename=unique_filename,
             original_filename=file.filename,
             file_size=file_size,
             content_type=content_type,
+            content_hash=content_hash,
             storage_location="minio",
             object_key=object_key,
             access_url=presigned_url
@@ -224,6 +261,9 @@ def download_file(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You don't have permission to access this file"
         )
+    
+    # Log file access for analytics
+    log_file_access(db, file.id, current_user.id, "download")
     
     from fastapi.responses import RedirectResponse, StreamingResponse
     import io

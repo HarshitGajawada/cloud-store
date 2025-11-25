@@ -67,6 +67,7 @@ class FileResponse(BaseModel):
     original_filename: str
     file_size: int
     content_type: Optional[str]
+    content_hash: Optional[str] = None
     storage_location: str
     access_url: str
     uploaded_at: datetime
@@ -78,3 +79,41 @@ class FileResponse(BaseModel):
 
 class FileListResponse(BaseModel):
     files: list[FileResponse]
+
+
+class DuplicateFileResponse(BaseModel):
+    """Response when a duplicate file is detected"""
+    is_duplicate: bool = True
+    message: str
+    existing_file: FileResponse
+
+
+# Analytics Schemas
+class FileAccessLogResponse(BaseModel):
+    id: int
+    file_id: int
+    action: str
+    accessed_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class AnalyticsSummary(BaseModel):
+    """Summary analytics for user's files"""
+    total_files: int
+    total_storage_bytes: int
+    files_in_minio: int
+    files_in_s3: int
+    total_downloads: int
+    most_accessed_files: list[dict]
+
+
+class AccessTimelineEntry(BaseModel):
+    date: str
+    count: int
+
+
+class AccessTimeline(BaseModel):
+    """File access timeline data"""
+    timeline: list[AccessTimelineEntry]

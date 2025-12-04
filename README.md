@@ -1,5 +1,10 @@
 # Hybrid Cloud Storage System
 
+[![Dockerized](https://img.shields.io/badge/docker-ready-blue)]()
+[![FastAPI](https://img.shields.io/badge/backend-fastapi-green)]()
+[![React](https://img.shields.io/badge/frontend-react-blue)]()
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)]()
+
 A full-stack application that provides secure file storage with automatic cloud synchronization. Files are initially stored on a local MinIO server for fast access, then automatically synchronized to AWS S3 via a scheduled background process.
 
 ## Features
